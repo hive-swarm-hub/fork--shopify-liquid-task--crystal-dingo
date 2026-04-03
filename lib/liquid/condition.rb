@@ -74,10 +74,21 @@ module Liquid
       loop do
         case condition.child_relation
         when :or
-          r = result.respond_to?(:to_liquid_value) ? result.to_liquid_value : result
+          # Inline to_liquid_value: primitives never have it
+          r = case result
+              when String, Integer, Float, NilClass, TrueClass, FalseClass, Array, Hash
+                result
+              else
+                result.respond_to?(:to_liquid_value) ? result.to_liquid_value : result
+              end
           break if r
         when :and
-          r = result.respond_to?(:to_liquid_value) ? result.to_liquid_value : result
+          r = case result
+              when String, Integer, Float, NilClass, TrueClass, FalseClass, Array, Hash
+                result
+              else
+                result.respond_to?(:to_liquid_value) ? result.to_liquid_value : result
+              end
           break unless r
         else
           break
@@ -185,8 +196,18 @@ module Liquid
       # return this as the result.
       return context.evaluate(left) if op.nil?
 
-      left  = Liquid::Utils.to_liquid_value(context.evaluate(left))
-      right = Liquid::Utils.to_liquid_value(context.evaluate(right))
+      left = context.evaluate(left)
+      right = context.evaluate(right)
+
+      # Inline to_liquid_value fast path for primitives (avoids method call + case overhead)
+      unless left.instance_of?(String) || left.instance_of?(Integer) || left.instance_of?(Float) ||
+             left.nil? || left.equal?(true) || left.equal?(false) || left.instance_of?(Array) || left.instance_of?(Hash)
+        left = left.respond_to?(:to_liquid_value) ? left.to_liquid_value : left
+      end
+      unless right.instance_of?(String) || right.instance_of?(Integer) || right.instance_of?(Float) ||
+             right.nil? || right.equal?(true) || right.equal?(false) || right.instance_of?(Array) || right.instance_of?(Hash)
+        right = right.respond_to?(:to_liquid_value) ? right.to_liquid_value : right
+      end
 
       case op
       when '=='

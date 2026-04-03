@@ -250,28 +250,45 @@ module Liquid
       # Fast path: check top scope first (most common in for loops)
       scope = @scopes[0]
       if scope.key?(key)
-        variable = lookup_and_evaluate(scope, key, raise_on_not_found: raise_on_not_found)
+        # Inline lookup_and_evaluate for top scope (avoids method call in hot path)
+        variable = scope[key]
+        if variable.nil? && @strict_variables && raise_on_not_found && !scope.key?(key)
+          raise Liquid::UndefinedVariable, "undefined variable #{key}"
+        end
+        if variable.instance_of?(Proc) && scope.respond_to?(:[]=)
+          variable = variable.arity == 0 ? variable.call : variable.call(self)
+          scope[key] = variable
+        end
       elsif @scopes.length == 1
         # Only one scope and key not found — go straight to environments
         variable = try_variable_find_in_environments(key, raise_on_not_found: raise_on_not_found)
       else
-        # Multiple scopes — search through all of them
+        # Multiple scopes — search through all of them (check scope 1 directly for 2-scope case)
         scopes = @scopes
-        found_scope = nil
-        i = 1
         len = scopes.length
-        while i < len
-          if scopes[i].key?(key)
-            found_scope = scopes[i]
-            break
+        if len == 2
+          s = scopes[1]
+          if s.key?(key)
+            variable = lookup_and_evaluate(s, key, raise_on_not_found: raise_on_not_found)
+          else
+            variable = try_variable_find_in_environments(key, raise_on_not_found: raise_on_not_found)
           end
-          i += 1
-        end
-
-        variable = if found_scope
-          lookup_and_evaluate(found_scope, key, raise_on_not_found: raise_on_not_found)
         else
-          try_variable_find_in_environments(key, raise_on_not_found: raise_on_not_found)
+          found_scope = nil
+          i = 1
+          while i < len
+            if scopes[i].key?(key)
+              found_scope = scopes[i]
+              break
+            end
+            i += 1
+          end
+
+          variable = if found_scope
+            lookup_and_evaluate(found_scope, key, raise_on_not_found: raise_on_not_found)
+          else
+            try_variable_find_in_environments(key, raise_on_not_found: raise_on_not_found)
+          end
         end
       end
 

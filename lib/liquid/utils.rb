@@ -14,7 +14,8 @@ module Liquid
         elsif to
           collection.slice(from, to - from) || Const::EMPTY_ARRAY
         else
-          collection.slice(from..) || Const::EMPTY_ARRAY
+          # Avoid Range allocation: use (from, length) form instead of (from..)
+          collection.slice(from, collection.length - from) || Const::EMPTY_ARRAY
         end
       else
         slice_collection_using_each(collection, from, to)
@@ -111,6 +112,7 @@ module Liquid
     SMALL_INT_STRINGS = Array.new(1000) { |i| i.to_s.freeze }.freeze
 
     def self.to_s(obj, seen = nil)
+      return obj if obj.instance_of?(String)
       case obj
       when Integer
         return (obj >= 0 && obj < 1000) ? SMALL_INT_STRINGS[obj] : obj.to_s

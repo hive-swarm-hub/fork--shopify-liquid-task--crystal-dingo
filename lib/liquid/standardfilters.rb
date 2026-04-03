@@ -101,7 +101,18 @@ module Liquid
     # @liquid_return [string]
     def escape(input)
       return if input.nil?
-      CGI.escapeHTML(input.instance_of?(String) ? input : Utils.to_s(input))
+      str = input.instance_of?(String) ? input : Utils.to_s(input)
+      # Fast path: byte-scan for HTML special chars; skip CGI.escapeHTML if none found
+      len = str.bytesize
+      i = 0
+      while i < len
+        b = str.getbyte(i)
+        if b == 38 || b == 60 || b == 62 || b == 34 || b == 39 # & < > " '
+          return CGI.escapeHTML(str)
+        end
+        i += 1
+      end
+      str
     end
     alias_method :h, :escape
 
@@ -432,6 +443,8 @@ module Liquid
     # @liquid_return [string]
     def strip_html(input)
       input = Utils.to_s(input)
+      # Fast path: no HTML tags at all — skip expensive gsub
+      return input unless input.include?('<')
       empty  = ''
       result = input.gsub(STRIP_HTML_BLOCKS, empty)
       result.gsub!(STRIP_HTML_TAGS, empty)
@@ -675,9 +688,11 @@ module Liquid
     # @liquid_syntax string | replace: string, string
     # @liquid_return [string]
     def replace(input, string, replacement = '')
-      string = Utils.to_s(string)
-      replacement = Utils.to_s(replacement)
-      input = Utils.to_s(input)
+      input = input.instance_of?(String) ? input : Utils.to_s(input)
+      string = string.instance_of?(String) ? string : Utils.to_s(string)
+      # Fast path: skip gsub when search string not present
+      return input unless input.include?(string)
+      replacement = replacement.instance_of?(String) ? replacement : Utils.to_s(replacement)
       input.gsub(string, replacement)
     end
 
@@ -802,6 +817,8 @@ module Liquid
     # @liquid_return [string]
     def newline_to_br(input)
       input = Utils.to_s(input)
+      # Fast path: skip gsub when no newlines present
+      return input unless input.include?("\n")
       input.gsub(/\r?\n/, "<br />\n")
     end
 
@@ -1067,7 +1084,22 @@ module Liquid
     # @liquid_optional_param allow_false: [boolean] Whether to use false values instead of the default.
     def default(input, default_value = '', options = {})
       options = {} unless options.is_a?(Hash)
-      false_check = options['allow_false'] ? input.nil? : !Liquid::Utils.to_liquid_value(input)
+      if options['allow_false']
+        false_check = input.nil?
+      else
+        # Inline to_liquid_value fast path for common types
+        val = case input
+              when String, Integer, Float, Array, Hash
+                input
+              when NilClass, FalseClass
+                input
+              when TrueClass
+                input
+              else
+                input.respond_to?(:to_liquid_value) ? input.to_liquid_value : input
+              end
+        false_check = !val
+      end
       false_check || (input.respond_to?(:empty?) && input.empty?) ? default_value : input
     end
 
