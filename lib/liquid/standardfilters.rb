@@ -67,7 +67,7 @@ module Liquid
     # @liquid_syntax string | downcase
     # @liquid_return [string]
     def downcase(input)
-      Utils.to_s(input).downcase
+      (input.instance_of?(String) ? input : Utils.to_s(input)).downcase
     end
 
     # @liquid_public_docs
@@ -78,7 +78,7 @@ module Liquid
     # @liquid_syntax string | upcase
     # @liquid_return [string]
     def upcase(input)
-      Utils.to_s(input).upcase
+      (input.instance_of?(String) ? input : Utils.to_s(input)).upcase
     end
 
     # @liquid_public_docs
@@ -100,7 +100,8 @@ module Liquid
     # @liquid_syntax string | escape
     # @liquid_return [string]
     def escape(input)
-      CGI.escapeHTML(Utils.to_s(input)) unless input.nil?
+      return if input.nil?
+      CGI.escapeHTML(input.instance_of?(String) ? input : Utils.to_s(input))
     end
     alias_method :h, :escape
 
@@ -112,7 +113,7 @@ module Liquid
     # @liquid_syntax string | escape_once
     # @liquid_return [string]
     def escape_once(input)
-      Utils.to_s(input).gsub(HTML_ESCAPE_ONCE_REGEXP, HTML_ESCAPE)
+      (input.instance_of?(String) ? input : Utils.to_s(input)).gsub(HTML_ESCAPE_ONCE_REGEXP, HTML_ESCAPE)
     end
 
     # @liquid_public_docs
@@ -354,8 +355,7 @@ module Liquid
     # @liquid_syntax string | strip
     # @liquid_return [string]
     def strip(input)
-      input = Utils.to_s(input)
-      input.strip
+      (input.instance_of?(String) ? input : Utils.to_s(input)).strip
     end
 
     # @liquid_public_docs
@@ -366,8 +366,7 @@ module Liquid
     # @liquid_syntax string | lstrip
     # @liquid_return [string]
     def lstrip(input)
-      input = Utils.to_s(input)
-      input.lstrip
+      (input.instance_of?(String) ? input : Utils.to_s(input)).lstrip
     end
 
     # @liquid_public_docs
@@ -378,8 +377,7 @@ module Liquid
     # @liquid_syntax string | rstrip
     # @liquid_return [string]
     def rstrip(input)
-      input = Utils.to_s(input)
-      input.rstrip
+      (input.instance_of?(String) ? input : Utils.to_s(input)).rstrip
     end
 
     # @liquid_public_docs
