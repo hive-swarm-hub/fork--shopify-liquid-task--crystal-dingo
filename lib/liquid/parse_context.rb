@@ -21,7 +21,12 @@ module Liquid
 
     def initialize(options = Const::EMPTY_HASH)
       @environment = options.fetch(:environment, Environment.default)
-      @template_options = options ? options.dup : {}
+      # Avoid dup for empty or minimal options
+      @template_options = if options.empty? || options.frozen?
+        { environment: @environment }
+      else
+        options.dup
+      end
 
       @locale   = @template_options[:locale] ||= self.class.default_locale
       @warnings = Const::EMPTY_ARRAY

@@ -14,8 +14,12 @@ module Liquid
   #
   #   context['bob']  #=> nil  class Context
   class Context
-    attr_reader :scopes, :errors, :registers, :environments, :resource_limits, :static_registers, :static_environments
+    attr_reader :scopes, :registers, :environments, :resource_limits, :static_registers, :static_environments
     attr_accessor :exception_renderer, :template_name, :partial, :global_filter, :strict_variables, :strict_filters, :environment
+
+    def errors
+      @errors.equal?(Const::EMPTY_ARRAY) ? (@errors = []) : @errors
+    end
 
     # rubocop:disable Metrics/ParameterLists
     def self.build(environment: Environment.default, environments: {}, outer_scope: {}, registers: {}, rethrow_errors: false, resource_limits: nil, static_environments: {}, &block)
@@ -35,7 +39,7 @@ module Liquid
       end
       @scopes              = [outer_scope || {}]
       @registers           = registers.is_a?(Registers) ? registers : Registers.new(registers)
-      @errors              = []
+      @errors              = Const::EMPTY_ARRAY
       @partial             = false
       @strict_variables    = false
       @resource_limits     = resource_limits || ResourceLimits.new(environment.default_resource_limits)
@@ -126,6 +130,12 @@ module Liquid
     # Fast path for two-argument filter invocation (e.g. {{ value | default: 'x' }})
     def invoke_two(method, input, arg1)
       result = strainer.invoke_two(method, input, arg1)
+      result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil? ? result : result.to_liquid
+    end
+
+    # Fast path for three-argument filter invocation (e.g. {{ value | replace: 'a', 'b' }})
+    def invoke_three(method, input, arg1, arg2)
+      result = strainer.invoke_three(method, input, arg1, arg2)
       result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil? ? result : result.to_liquid
     end
 

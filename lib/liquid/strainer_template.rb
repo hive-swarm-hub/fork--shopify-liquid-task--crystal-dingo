@@ -85,5 +85,18 @@ module Liquid
     rescue ::ArgumentError => e
       raise Liquid::ArgumentError, e.message, e.backtrace
     end
+
+    # Fast path for three-argument filter invocation (input + two args).
+    def invoke_three(method, input, arg1, arg2)
+      if self.class.invokable?(method)
+        send(method, input, arg1, arg2)
+      elsif @context.strict_filters
+        raise Liquid::UndefinedFilter, "undefined filter #{method}"
+      else
+        input
+      end
+    rescue ::ArgumentError => e
+      raise Liquid::ArgumentError, e.message, e.backtrace
+    end
   end
 end
