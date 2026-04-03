@@ -118,7 +118,9 @@ module Liquid
     # @liquid_syntax string | escape_once
     # @liquid_return [string]
     def escape_once(input)
-      (input.instance_of?(String) ? input : Utils.to_s(input)).gsub(HTML_ESCAPE_ONCE_REGEXP, HTML_ESCAPE)
+      str = input.instance_of?(String) ? input : Utils.to_s(input)
+      # Fast path: skip gsub if no special chars to escape
+      str.match?(HTML_ESCAPE_ONCE_REGEXP) ? str.gsub(HTML_ESCAPE_ONCE_REGEXP, HTML_ESCAPE) : str
     end
 
     # @liquid_public_docs

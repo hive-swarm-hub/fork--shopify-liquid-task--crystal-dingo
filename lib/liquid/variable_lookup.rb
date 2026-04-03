@@ -173,7 +173,15 @@ module Liquid
         key = @single_lookup
         if object.instance_of?(Hash)
           if object.key?(key)
-            object = context.lookup_and_evaluate(object, key)
+            # Inline lookup: avoid context.lookup_and_evaluate method call
+            value = object[key]
+            object = if value.instance_of?(Proc)
+              result = value.arity == 0 ? value.call : value.call(context)
+              object[key] = result
+              result
+            else
+              value
+            end
             unless object.instance_of?(String) || object.instance_of?(Integer) || object.instance_of?(Float) ||
                 object.instance_of?(Array) || object.instance_of?(Hash) || object.nil?
               object = object.to_liquid
@@ -224,7 +232,15 @@ module Liquid
 
         if object.instance_of?(Hash)
           if object.key?(key)
-            object = context.lookup_and_evaluate(object, key)
+            # Inline lookup: avoid context.lookup_and_evaluate method call
+            value = object[key]
+            object = if value.instance_of?(Proc)
+              result = value.arity == 0 ? value.call : value.call(context)
+              object[key] = result
+              result
+            else
+              value
+            end
             unless object.instance_of?(String) || object.instance_of?(Integer) || object.instance_of?(Float) ||
                 object.instance_of?(Array) || object.instance_of?(Hash) || object.nil?
               object = object.to_liquid
