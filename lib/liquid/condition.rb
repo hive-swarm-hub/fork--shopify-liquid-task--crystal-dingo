@@ -186,15 +186,63 @@ module Liquid
       left  = Liquid::Utils.to_liquid_value(context.evaluate(left))
       right = Liquid::Utils.to_liquid_value(context.evaluate(right))
 
-      operation = self.class.operators[op] || raise(Liquid::ArgumentError, "Unknown operator #{op}")
-
-      if operation.respond_to?(:call)
-        operation.call(self, left, right)
-      elsif left.respond_to?(operation) && right.respond_to?(operation) && !left.is_a?(Hash) && !right.is_a?(Hash)
+      # Direct dispatch for common operators — avoids hash lookup + respond_to? checks
+      case op
+      when '=='
+        equal_variables(left, right)
+      when '!='
+        !equal_variables(left, right)
+      when '<>'
+        !equal_variables(left, right)
+      when '<'
+        return unless left.respond_to?(:<) && right.respond_to?(:<) && !left.is_a?(Hash) && !right.is_a?(Hash)
         begin
-          left.send(operation, right)
+          left < right
         rescue ::ArgumentError => e
           raise Liquid::ArgumentError, e.message
+        end
+      when '>'
+        return unless left.respond_to?(:>) && right.respond_to?(:>) && !left.is_a?(Hash) && !right.is_a?(Hash)
+        begin
+          left > right
+        rescue ::ArgumentError => e
+          raise Liquid::ArgumentError, e.message
+        end
+      when '>='
+        return unless left.respond_to?(:>=) && right.respond_to?(:>=) && !left.is_a?(Hash) && !right.is_a?(Hash)
+        begin
+          left >= right
+        rescue ::ArgumentError => e
+          raise Liquid::ArgumentError, e.message
+        end
+      when '<='
+        return unless left.respond_to?(:<=) && right.respond_to?(:<=) && !left.is_a?(Hash) && !right.is_a?(Hash)
+        begin
+          left <= right
+        rescue ::ArgumentError => e
+          raise Liquid::ArgumentError, e.message
+        end
+      when 'contains'
+        if left && right && left.respond_to?(:include?)
+          right = right.to_s if left.is_a?(String)
+          begin
+            left.include?(right)
+          rescue Encoding::CompatibilityError
+            left.b.include?(right.b)
+          end
+        else
+          false
+        end
+      else
+        operation = self.class.operators[op] || raise(Liquid::ArgumentError, "Unknown operator #{op}")
+        if operation.respond_to?(:call)
+          operation.call(self, left, right)
+        elsif left.respond_to?(operation) && right.respond_to?(operation) && !left.is_a?(Hash) && !right.is_a?(Hash)
+          begin
+            left.send(operation, right)
+          rescue ::ArgumentError => e
+            raise Liquid::ArgumentError, e.message
+          end
         end
       end
     end

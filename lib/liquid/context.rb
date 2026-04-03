@@ -111,18 +111,22 @@ module Liquid
     end
 
     def invoke(method, *args)
-      strainer.invoke(method, *args).to_liquid
+      result = strainer.invoke(method, *args)
+      # Skip to_liquid for primitives (they return self)
+      result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil? ? result : result.to_liquid
     end
 
     # Fast path for single-argument filter invocation (the most common case:
     # {{ value | filter }}) — avoids *args splat allocation.
     def invoke_single(method, input)
-      strainer.invoke_single(method, input).to_liquid
+      result = strainer.invoke_single(method, input)
+      result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil? ? result : result.to_liquid
     end
 
     # Fast path for two-argument filter invocation (e.g. {{ value | default: 'x' }})
     def invoke_two(method, input, arg1)
-      strainer.invoke_two(method, input, arg1).to_liquid
+      result = strainer.invoke_two(method, input, arg1)
+      result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil? ? result : result.to_liquid
     end
 
     # Push new local scope on the stack. use <tt>Context#stack</tt> instead
@@ -204,7 +208,10 @@ module Liquid
     end
 
     def evaluate(object)
-      object.respond_to?(:evaluate) ? object.evaluate(self) : object
+      # Fast path: most common types don't need evaluation
+      return object if object.instance_of?(String) || object.instance_of?(Integer)
+      return object unless object.respond_to?(:evaluate)
+      object.evaluate(self)
     end
 
     # Fetches an object starting at the local scope and then moving up the hierachy
@@ -217,11 +224,21 @@ module Liquid
         # Only one scope and key not found — go straight to environments
         variable = try_variable_find_in_environments(key, raise_on_not_found: raise_on_not_found)
       else
-        # Multiple scopes — search through all of them
-        index = @scopes.find_index { |s| s.key?(key) }
+        # Multiple scopes — search through all of them (index-based loop avoids block alloc)
+        found_scope = nil
+        i = 1
+        slen = @scopes.length
+        while i < slen
+          s = @scopes[i]
+          if s.key?(key)
+            found_scope = s
+            break
+          end
+          i += 1
+        end
 
-        variable = if index
-          lookup_and_evaluate(@scopes[index], key, raise_on_not_found: raise_on_not_found)
+        variable = if found_scope
+          lookup_and_evaluate(found_scope, key, raise_on_not_found: raise_on_not_found)
         else
           try_variable_find_in_environments(key, raise_on_not_found: raise_on_not_found)
         end
@@ -254,7 +271,7 @@ module Liquid
 
       value = obj[key]
 
-      if value.is_a?(Proc) && obj.respond_to?(:[]=)
+      if value.instance_of?(Proc) && obj.respond_to?(:[]=)
         obj[key] = value.arity == 0 ? value.call : value.call(self)
       else
         value
@@ -286,17 +303,25 @@ module Liquid
     attr_reader :base_scope_depth
 
     def try_variable_find_in_environments(key, raise_on_not_found:)
-      @environments.each do |environment|
-        found_variable = lookup_and_evaluate(environment, key, raise_on_not_found: raise_on_not_found)
+      i = 0
+      envs = @environments
+      elen = envs.length
+      while i < elen
+        found_variable = lookup_and_evaluate(envs[i], key, raise_on_not_found: raise_on_not_found)
         if !found_variable.nil? || @strict_variables && raise_on_not_found
           return found_variable
         end
+        i += 1
       end
-      @static_environments.each do |environment|
-        found_variable = lookup_and_evaluate(environment, key, raise_on_not_found: raise_on_not_found)
+      i = 0
+      senvs = @static_environments
+      selen = senvs.length
+      while i < selen
+        found_variable = lookup_and_evaluate(senvs[i], key, raise_on_not_found: raise_on_not_found)
         if !found_variable.nil? || @strict_variables && raise_on_not_found
           return found_variable
         end
+        i += 1
       end
       nil
     end

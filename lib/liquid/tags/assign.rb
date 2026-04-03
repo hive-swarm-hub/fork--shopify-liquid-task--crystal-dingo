@@ -29,9 +29,30 @@ module Liquid
 
     def initialize(tag_name, markup, parse_context)
       super
-      if markup =~ Syntax
-        @to   = Regexp.last_match(1)
-        @from = Variable.new(Regexp.last_match(2), parse_context)
+      # Fast byte-level parsing: find '=' to split "varname = expression"
+      eq_pos = markup.index('=')
+      if eq_pos
+        # Trim trailing whitespace from variable name
+        name_end = eq_pos
+        while name_end > 0
+          b = markup.getbyte(name_end - 1)
+          break unless b == 32 || b == 9 || b == 10 || b == 13
+          name_end -= 1
+        end
+        if name_end > 0
+          @to = markup.byteslice(0, name_end)
+          rest_start = eq_pos + 1
+          # Trim leading whitespace from expression
+          len = markup.bytesize
+          while rest_start < len
+            b = markup.getbyte(rest_start)
+            break unless b == 32 || b == 9 || b == 10 || b == 13
+            rest_start += 1
+          end
+          @from = Variable.new(markup.byteslice(rest_start, len - rest_start), parse_context)
+        else
+          self.class.raise_syntax_error(parse_context)
+        end
       else
         self.class.raise_syntax_error(parse_context)
       end

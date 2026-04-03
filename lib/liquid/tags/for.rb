@@ -187,16 +187,16 @@ module Liquid
       for_stack = context.registers[:for_stack] ||= []
       length    = segment.length
 
-      context.stack do
-        loop_vars = Liquid::ForloopDrop.new(@name, length, for_stack[-1])
+      loop_vars = Liquid::ForloopDrop.new(@name, length, for_stack[-1])
+      # Pre-create scope hash with both keys to avoid repeated hash modifications
+      scope = { 'forloop' => loop_vars, @variable_name => nil }
 
+      context.stack(scope) do
         for_stack.push(loop_vars)
 
         begin
-          context['forloop'] = loop_vars
-
           segment.each do |item|
-            context[@variable_name] = item
+            scope[@variable_name] = item
             @for_block.render_to_output_buffer(context, output)
             loop_vars.send(:increment!)
 

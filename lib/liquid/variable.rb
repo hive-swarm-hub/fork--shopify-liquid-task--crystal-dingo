@@ -74,6 +74,10 @@ module Liquid
     # Cache for [filtername, EMPTY_ARRAY] tuples — avoids repeated array creation
     NO_ARG_FILTER_CACHE = Hash.new { |h, k| h[k] = [k, Const::EMPTY_ARRAY].freeze }
 
+    # Global cache: maps variable markup string → frozen [name, filters] pair.
+    # On cache hit, try_fast_parse skips all filter scanning.
+    GLOBAL_VARIABLE_STATE_CACHE = {}
+
     FilterMarkupRegex        = /#{FilterSeparator}\s*(.*)/om
     FilterParser             = /(?:\s+|#{QuotedFragment}|#{ArgumentSeparator})+/o
     FilterArgsRegex          = /(?:#{FilterArgumentSeparator}|#{ArgumentSeparator})\s*((?:\w+\s*\:\s*)?#{QuotedFragment})/o
@@ -102,6 +106,15 @@ module Liquid
     end
 
     private def try_fast_parse(markup, parse_context)
+      # Check global variable state cache first
+      if parse_context.variable_cacheable
+        cached = GLOBAL_VARIABLE_STATE_CACHE[markup]
+        if cached
+          @name, @filters = cached
+          return true
+        end
+      end
+
       len = markup.bytesize
       return false if len == 0
 
@@ -178,6 +191,9 @@ module Liquid
       # End of markup? No filters.
       if pos >= len
         @filters = Const::EMPTY_ARRAY
+        if parse_context.variable_cacheable
+          GLOBAL_VARIABLE_STATE_CACHE[markup] = [@name, Const::EMPTY_ARRAY].freeze
+        end
         return true
       end
 
@@ -305,6 +321,21 @@ module Liquid
       return false if filter_pos < len
 
       @filters = Const::EMPTY_ARRAY if @filters.empty?
+
+      # Store in global cache for reuse across parses
+      if parse_context.variable_cacheable
+        frozen_filters = if @filters.frozen?
+          @filters
+        else
+          @filters.each do |f|
+            f[1].freeze unless f[1].frozen?
+            f.freeze unless f.frozen?
+          end
+          @filters.freeze
+        end
+        GLOBAL_VARIABLE_STATE_CACHE[markup] = [@name, frozen_filters].freeze
+      end
+
       true
     rescue SyntaxError
       # If fast parse fails, fall back to full parse
@@ -398,12 +429,24 @@ module Liquid
 
     def render_to_output_buffer(context, output)
       # Fast path: no filters and no global filter
-      obj = if @filters.empty? && context.global_filter.nil?
-        context.evaluate(@name)
+      obj = if @filters.equal?(Const::EMPTY_ARRAY) && context.global_filter.nil?
+        # Inline evaluate for VariableLookup (most common case)
+        name = @name
+        name.instance_of?(VariableLookup) ? name.evaluate(context) : (name.instance_of?(String) || name.instance_of?(Integer) ? name : context.evaluate(name))
       else
         render(context)
       end
-      render_obj_to_output(obj, output)
+
+      # Inline render_obj_to_output for common types
+      if obj.instance_of?(String)
+        output << obj
+      elsif obj.nil?
+        # noop
+      elsif obj.instance_of?(Array)
+        obj.each { |o| render_obj_to_output(o, output) }
+      else
+        output << Liquid::Utils.to_s(obj)
+      end
       output
     end
 

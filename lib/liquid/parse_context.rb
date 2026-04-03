@@ -2,26 +2,53 @@
 
 module Liquid
   class ParseContext
+    # Global expression cache shared across all template parses with default options.
+    # Stores frozen VariableLookup/RangeLookup objects keyed by markup string.
+    GLOBAL_EXPRESSION_CACHE = {}
+
+    # Cached default locale to avoid allocating I18n.new per parse
+    @default_locale = nil
+    def self.default_locale
+      @default_locale ||= I18n.new
+    end
+
     attr_accessor :locale, :line_number, :trim_whitespace, :depth
-    attr_reader :partial, :warnings, :error_mode, :environment, :expression_cache, :string_scanner, :cursor
+    attr_reader :partial, :error_mode, :environment, :expression_cache, :string_scanner, :cursor, :variable_cacheable
+
+    def warnings
+      @warnings.equal?(Const::EMPTY_ARRAY) ? (@warnings = []) : @warnings
+    end
 
     def initialize(options = Const::EMPTY_HASH)
       @environment = options.fetch(:environment, Environment.default)
       @template_options = options ? options.dup : {}
 
-      @locale   = @template_options[:locale] ||= I18n.new
-      @warnings = []
+      @locale   = @template_options[:locale] ||= self.class.default_locale
+      @warnings = Const::EMPTY_ARRAY
 
       # constructing new StringScanner in Lexer, Tokenizer, etc is expensive
       # This StringScanner will be shared by all of them
       @string_scanner = StringScanner.new("")
 
-      @expression_cache = if options[:expression_cache].nil?
-        {}
-      elsif options[:expression_cache].respond_to?(:[]) && options[:expression_cache].respond_to?(:[]=)
-        options[:expression_cache]
-      elsif options[:expression_cache]
-        {}
+      # Use global expression cache for default options (no user-provided cache)
+      ec = options[:expression_cache]
+      if ec.nil? && !options.key?(:expression_cache)
+        @expression_cache = GLOBAL_EXPRESSION_CACHE
+        @variable_cacheable = true
+      elsif ec.nil?
+        # Explicitly passed nil: use global cache
+        @expression_cache = GLOBAL_EXPRESSION_CACHE
+        @variable_cacheable = true
+      elsif ec.respond_to?(:[]) && ec.respond_to?(:[]=)
+        @expression_cache = ec
+        @variable_cacheable = false
+      elsif ec
+        @expression_cache = {}
+        @variable_cacheable = false
+      else
+        # expression_cache: false — disable caching
+        @expression_cache = nil
+        @variable_cacheable = false
       end
 
       @cursor = Cursor.new("")
