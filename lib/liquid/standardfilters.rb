@@ -456,6 +456,8 @@ module Liquid
     # @liquid_return [string]
     def strip_newlines(input)
       input = Utils.to_s(input)
+      # Fast path: skip gsub when no newlines present
+      return input unless input.include?("\n")
       input.gsub(/\r?\n/, '')
     end
 
