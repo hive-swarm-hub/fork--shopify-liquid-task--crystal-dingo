@@ -44,15 +44,18 @@ module Liquid
           markup = markup.strip if last_byte == 32 || last_byte == 9 || last_byte == 10 || last_byte == 13
         end
 
-        if (markup.start_with?('"') && markup.end_with?('"')) ||
-          (markup.start_with?("'") && markup.end_with?("'"))
-          if cache
-            return cache[markup] if cache.key?(markup)
-            result = markup.byteslice(1, markup.bytesize - 2)
-            cache[markup] = result
-            return result
+        fb = markup.getbyte(0)
+        if fb == 34 || fb == 39 # " or '
+          lb = markup.getbyte(markup.bytesize - 1)
+          if lb == fb
+            if cache
+              return cache[markup] if cache.key?(markup)
+              result = markup.byteslice(1, markup.bytesize - 2)
+              cache[markup] = result
+              return result
+            end
+            return markup.byteslice(1, markup.bytesize - 2)
           end
-          return markup.byteslice(1, markup.bytesize - 2)
         elsif LITERALS.key?(markup)
           return LITERALS[markup]
         end
