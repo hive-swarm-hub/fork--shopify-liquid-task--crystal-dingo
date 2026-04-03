@@ -244,7 +244,7 @@ module Liquid
     protected
 
     def state
-      [@name, lookups, @command_flags]
+      [@name, @lookups, @command_flags]
     end
 
     class ParseTreeVisitor < Liquid::ParseTreeVisitor

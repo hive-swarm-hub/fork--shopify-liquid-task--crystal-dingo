@@ -221,30 +221,28 @@ module Liquid
     end
 
     def evaluate(object)
-      # Fast path: most common types don't need evaluation
       return object if object.instance_of?(String) || object.instance_of?(Integer)
-      return object unless object.respond_to?(:evaluate)
-      object.evaluate(self)
+      object.respond_to?(:evaluate) ? object.evaluate(self) : object
     end
 
     # Fetches an object starting at the local scope and then moving up the hierachy
     def find_variable(key, raise_on_not_found: true)
       # Fast path: check top scope first (most common in for loops)
-      scope = @scopes[0]
+      scopes = @scopes
+      scope = scopes[0]
       if scope.key?(key)
         variable = lookup_and_evaluate(scope, key, raise_on_not_found: raise_on_not_found)
-      elsif @scopes.length == 1
+      elsif scopes.length == 1
         # Only one scope and key not found — go straight to environments
         variable = try_variable_find_in_environments(key, raise_on_not_found: raise_on_not_found)
       else
-        # Multiple scopes — search through all of them (index-based loop avoids block alloc)
+        # Multiple scopes — search through all of them
         found_scope = nil
         i = 1
-        slen = @scopes.length
-        while i < slen
-          s = @scopes[i]
-          if s.key?(key)
-            found_scope = s
+        len = scopes.length
+        while i < len
+          if scopes[i].key?(key)
+            found_scope = scopes[i]
             break
           end
           i += 1
