@@ -56,12 +56,7 @@ module Liquid
       len = blocks.length
       while idx < len
         block = blocks[idx]
-        result = block.evaluate(context)
-        # Inline to_liquid_value: skip method call for common primitives
-        unless result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) ||
-               result.nil? || result.equal?(true) || result.equal?(false)
-          result = result.respond_to?(:to_liquid_value) ? result.to_liquid_value : result
-        end
+        result = Liquid::Utils.to_liquid_value(block.evaluate(context))
 
         if result
           return block.attachment.render_to_output_buffer(context, output)
