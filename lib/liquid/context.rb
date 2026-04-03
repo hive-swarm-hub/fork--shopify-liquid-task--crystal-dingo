@@ -250,12 +250,9 @@ module Liquid
       # Fast path: check top scope first (most common in for loops)
       scope = @scopes[0]
       if scope.key?(key)
-        # Inline lookup_and_evaluate for top scope (avoids method call in hot path)
+        # Inline lookup: key is known to exist, skip strict_variables check
         variable = scope[key]
-        if variable.nil? && @strict_variables && raise_on_not_found && !scope.key?(key)
-          raise Liquid::UndefinedVariable, "undefined variable #{key}"
-        end
-        if variable.instance_of?(Proc) && scope.respond_to?(:[]=)
+        if variable.instance_of?(Proc)
           variable = variable.arity == 0 ? variable.call : variable.call(self)
           scope[key] = variable
         end
@@ -357,10 +354,12 @@ module Liquid
         # Inline lookup for single environment (most common case, avoids method call)
         env = envs[0]
         found_variable = env[key]
-        if found_variable.nil? && @strict_variables && raise_on_not_found && env.respond_to?(:key?) && !env.key?(key)
-          raise Liquid::UndefinedVariable, "undefined variable #{key}"
+        if found_variable.nil? && @strict_variables && raise_on_not_found
+          if env.respond_to?(:key?) && !env.key?(key)
+            raise Liquid::UndefinedVariable, "undefined variable #{key}"
+          end
         end
-        if found_variable.instance_of?(Proc) && env.respond_to?(:[]=)
+        if found_variable.instance_of?(Proc)
           found_variable = found_variable.arity == 0 ? found_variable.call : found_variable.call(self)
           env[key] = found_variable
         end
