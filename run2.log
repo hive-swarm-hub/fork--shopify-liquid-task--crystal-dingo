@@ -1,0 +1,22 @@
+Running 975-test base gate...
+Running PR baseline benchmark (best of 3)...
+  pr-baseline run 1: combined=5334us parse=3536us render=1798us allocations=25791
+  pr-baseline run 2: combined=5406us parse=3564us render=1842us allocations=25791
+  pr-baseline run 3: combined=5248us parse=3421us render=1827us allocations=25791
+Running candidate benchmark (best of 3)...
+  candidate run 1: combined=3723us parse=2193us render=1530us allocations=12266
+  candidate run 2: combined=3796us parse=2251us render=1545us allocations=12266
+  candidate run 3: combined=3684us parse=2188us render=1496us allocations=12266
+Verifying render correctness...
+Render correctness verified.
+---
+efficiency_score: 1.730692
+pr_baseline_combined_us: 5248
+pr_baseline_allocations: 25791
+combined_us:      3684
+parse_us:         2188
+render_us:        1496
+allocations:      12266
+correct:          975
+total:            975
+valid:            true

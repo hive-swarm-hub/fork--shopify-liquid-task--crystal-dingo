@@ -207,67 +207,17 @@ module Liquid
 
         begin
           for_block = @for_block
-          # When profiling is active, fall back to per-iteration render for accurate tracking
-          if context.respond_to?(:profiler) && context.profiler
-            segment.each do |item|
-              scope[var_name] = item
-              for_block.render_to_output_buffer(context, output)
-              loop_vars.increment!
-              next unless context.interrupt?
-              interrupt = context.pop_interrupt
-              break if interrupt.is_a?(BreakInterrupt)
-              next if interrupt.is_a?(ContinueInterrupt)
-            end
-          else
-            for_block.freeze unless for_block.frozen?
-            nodelist = for_block.nodelist
+          # Direct scope write avoids context[]= method dispatch overhead
+          segment.each do |item|
+            scope[var_name] = item
+            for_block.render_to_output_buffer(context, output)
+            loop_vars.increment!
 
-            # Pre-compute render loop state once (avoids per-iteration overhead)
-            resource_limits = context.resource_limits
-            resource_limits.increment_render_score(nodelist.length * length)
-            check_write = resource_limits.render_length_limit || resource_limits.last_capture_length
-
-            # Inline render loop — avoids BlockBody#render_to_output_buffer call per iteration
-            if check_write
-              segment.each do |item|
-                scope[var_name] = item
-                idx = 0
-                while (node = nodelist[idx])
-                  if node.instance_of?(String)
-                    output << node
-                  else
-                    BlockBody.render_node(context, output, node)
-                    break if context.interrupt?
-                  end
-                  idx += 1
-                  resource_limits.increment_write_score(output)
-                end
-                loop_vars.increment!
-                next unless context.interrupt?
-                interrupt = context.pop_interrupt
-                break if interrupt.is_a?(BreakInterrupt)
-                next if interrupt.is_a?(ContinueInterrupt)
-              end
-            else
-              segment.each do |item|
-                scope[var_name] = item
-                idx = 0
-                while (node = nodelist[idx])
-                  if node.instance_of?(String)
-                    output << node
-                  else
-                    BlockBody.render_node(context, output, node)
-                    break if context.interrupt?
-                  end
-                  idx += 1
-                end
-                loop_vars.increment!
-                next unless context.interrupt?
-                interrupt = context.pop_interrupt
-                break if interrupt.is_a?(BreakInterrupt)
-                next if interrupt.is_a?(ContinueInterrupt)
-              end
-            end
+            # Handle any interrupts if they exist.
+            next unless context.interrupt?
+            interrupt = context.pop_interrupt
+            break if interrupt.is_a?(BreakInterrupt)
+            next if interrupt.is_a?(ContinueInterrupt)
           end
         ensure
           for_stack.pop
