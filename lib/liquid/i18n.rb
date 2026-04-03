@@ -10,6 +10,11 @@ module Liquid
 
     attr_reader :path
 
+    # Cache the default locale I18n instance
+    def self.default
+      @default_instance ||= new
+    end
+
     def initialize(path = DEFAULT_LOCALE)
       @path = path
     end

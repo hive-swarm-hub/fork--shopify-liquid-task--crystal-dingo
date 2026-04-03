@@ -163,75 +163,78 @@ module Liquid
     end
 
     def evaluate(context)
-      name   = context.evaluate(@name)
+      # Fast path: String names (the overwhelmingly common case) don't need evaluation
+      name = @name
+      name = context.evaluate(name) unless name.instance_of?(String)
       object = context.find_variable(name)
 
-      # Fast path: single-segment lookup (e.g., product.title)
+      # Fast path: single-segment lookup (e.g. product.title) — avoids Array overhead
       if @single_lookup
         key = @single_lookup
-        return evaluate_lookup(context, object, key, 0)
+        if object.instance_of?(Hash) ? object.key?(key) :
+            (object.respond_to?(:[]) &&
+              ((object.respond_to?(:key?) && object.key?(key)) ||
+               (object.respond_to?(:fetch) && key.is_a?(Integer))))
+          object = context.lookup_and_evaluate(object, key)
+          unless object.instance_of?(String) || object.instance_of?(Integer) || object.instance_of?(Float) ||
+              object.instance_of?(Array) || object.instance_of?(Hash) || object.nil?
+            object = object.to_liquid
+            object.context = context if object.respond_to?(:context=)
+          end
+        elsif @command_flags != 0 && object.respond_to?(key)
+          object = object.send(key)
+          unless object.instance_of?(String) || object.instance_of?(Integer) || object.instance_of?(Array) || object.nil?
+            object = object.to_liquid
+            object.context = context if object.respond_to?(:context=)
+          end
+        elsif @command_flags != 0 && object.is_a?(String) && (key == "first" || key == "last")
+          object = key == "first" ? (object[0] || "") : (object[-1] || "")
+        else
+          return nil unless context.strict_variables
+          raise Liquid::UndefinedVariable, "undefined variable #{key}"
+        end
+        return object
       end
 
-      return object if @lookups.nil? || @lookups.empty?
+      lookups = @lookups
+      return object if lookups.nil? || lookups.length == 0
 
-      @lookups.each_index do |i|
-        lookup = @lookups[i]
+      i = 0
+      len = lookups.length
+      while i < len
+        lookup = lookups[i]
         key = lookup.instance_of?(String) ? lookup : context.evaluate(lookup)
 
-        object = evaluate_lookup(context, object, key, i)
-        return object if object.nil? && !(context.strict_variables)
+        unless key.instance_of?(String) || key.instance_of?(Integer)
+          key = Liquid::Utils.to_liquid_value(key)
+        end
+
+        if object.instance_of?(Hash) ? object.key?(key) :
+            (object.respond_to?(:[]) &&
+              ((object.respond_to?(:key?) && object.key?(key)) ||
+               (object.respond_to?(:fetch) && key.is_a?(Integer))))
+          object = context.lookup_and_evaluate(object, key)
+          unless object.instance_of?(String) || object.instance_of?(Integer) || object.instance_of?(Float) ||
+              object.instance_of?(Array) || object.instance_of?(Hash) || object.nil?
+            object = object.to_liquid
+            object.context = context if object.respond_to?(:context=)
+          end
+        elsif lookup_command?(i) && object.respond_to?(key)
+          object = object.send(key)
+          unless object.instance_of?(String) || object.instance_of?(Integer) || object.instance_of?(Array) || object.nil?
+            object = object.to_liquid
+            object.context = context if object.respond_to?(:context=)
+          end
+        elsif lookup_command?(i) && object.is_a?(String) && (key == "first" || key == "last")
+          object = key == "first" ? (object[0] || "") : (object[-1] || "")
+        else
+          return nil unless context.strict_variables
+          raise Liquid::UndefinedVariable, "undefined variable #{key}"
+        end
+        i += 1
       end
 
       object
-    end
-
-    private def evaluate_lookup(context, object, key, i)
-      # Cast "key" to its liquid value to enable it to act as a primitive value
-      # Fast path: strings and integers (most common key types) don't need conversion
-      unless key.instance_of?(String) || key.instance_of?(Integer)
-        key = Liquid::Utils.to_liquid_value(key)
-      end
-
-      # If object is a hash- or array-like object we look for the
-      # presence of the key and if its available we return it
-      if object.instance_of?(Hash) ? object.key?(key) :
-          (object.respond_to?(:[]) &&
-            ((object.respond_to?(:key?) && object.key?(key)) ||
-             (object.respond_to?(:fetch) && key.is_a?(Integer))))
-
-        # if its a proc we will replace the entry with the proc
-        object = context.lookup_and_evaluate(object, key)
-        # Skip to_liquid for common primitive types (they return self)
-        unless object.instance_of?(String) || object.instance_of?(Integer) || object.instance_of?(Float) ||
-            object.instance_of?(Array) || object.instance_of?(Hash) || object.nil?
-          object = object.to_liquid
-          object.context = context if object.respond_to?(:context=)
-        end
-        object
-
-        # Some special cases. If the part wasn't in square brackets and
-        # no key with the same name was found we interpret following calls
-        # as commands and call them on the current object
-      elsif lookup_command?(i) && object.respond_to?(key)
-        object = object.send(key)
-        unless object.instance_of?(String) || object.instance_of?(Integer) || object.instance_of?(Array) || object.nil?
-          object = object.to_liquid
-          object.context = context if object.respond_to?(:context=)
-        end
-        object
-
-      # Handle string first/last like ActiveSupport does (returns first/last character)
-      # ActiveSupport returns "" for empty strings, not nil
-      elsif lookup_command?(i) && object.is_a?(String) && (key == "first" || key == "last")
-        key == "first" ? (object[0] || "") : (object[-1] || "")
-
-        # No key was present with the desired value and it wasn't one of the directly supported
-        # keywords either. The only thing we got left is to return nil or
-        # raise an exception if `strict_variables` option is set to true
-      else
-        return nil unless context.strict_variables
-        raise Liquid::UndefinedVariable, "undefined variable #{key}"
-      end
     end
 
     def ==(other)

@@ -127,11 +127,16 @@ module Liquid
     OPEN_CURLEY_BYTE = 123 # '{'.ord
     PERCENT_BYTE = 37 # '%'.ord
 
-    # Fast check if string is whitespace-only (replaces WhitespaceOrNothing regex)
-    BLANK_STRING_REGEX = /\A\s*\z/
-
+    # Fast check if string is whitespace-only (byte-level, avoids regex)
     def self.blank_string?(str)
-      str.match?(BLANK_STRING_REGEX)
+      pos = 0
+      len = str.bytesize
+      while pos < len
+        b = str.getbyte(pos)
+        return false unless b == 32 || b == 9 || b == 10 || b == 13 || b == 12
+        pos += 1
+      end
+      true
     end
 
     private def parse_for_document(tokenizer, parse_context, &block)
@@ -243,22 +248,34 @@ module Liquid
       freeze unless frozen?
 
       resource_limits = context.resource_limits
-      resource_limits.increment_render_score(@nodelist.length)
+      nodelist = @nodelist
+      resource_limits.increment_render_score(nodelist.length)
 
       # Check if we need per-node write score tracking
       check_write = resource_limits.render_length_limit || resource_limits.last_capture_length
 
       idx = 0
-      while (node = @nodelist[idx])
-        if node.instance_of?(String)
-          output << node
-        else
-          render_node(context, output, node)
-          break if context.interrupt?
+      if check_write
+        while (node = nodelist[idx])
+          if node.instance_of?(String)
+            output << node
+          else
+            render_node(context, output, node)
+            break if context.interrupt?
+          end
+          idx += 1
+          resource_limits.increment_write_score(output)
         end
-        idx += 1
-
-        resource_limits.increment_write_score(output) if check_write
+      else
+        while (node = nodelist[idx])
+          if node.instance_of?(String)
+            output << node
+          else
+            render_node(context, output, node)
+            break if context.interrupt?
+          end
+          idx += 1
+        end
       end
 
       output
@@ -272,11 +289,22 @@ module Liquid
 
     CLOSE_CURLEY_BYTE = 125 # '}'.ord
 
+    # Cache entire Variable objects by their token string
+    GLOBAL_VARIABLE_OBJECT_CACHE = {}
+
     def create_variable(token, parse_context)
       len = token.bytesize
       if len >= 4 && token.getbyte(len - 1) == CLOSE_CURLEY_BYTE && token.getbyte(len - 2) == CLOSE_CURLEY_BYTE
+        # Cache Variable objects — only when default error mode and cacheable
+        em = parse_context.error_mode
+        cacheable = parse_context.variable_cacheable && em != :strict && em != :strict2 && em != :rigid
+        if cacheable && (cached = GLOBAL_VARIABLE_OBJECT_CACHE[token])
+          return cached
+        end
         markup = parse_context.cursor.parse_variable_token(token)
-        return Variable.new(markup, parse_context)
+        var = Variable.new(markup, parse_context)
+        GLOBAL_VARIABLE_OBJECT_CACHE[token] = var if cacheable
+        return var
       end
 
       BlockBody.raise_missing_variable_terminator(token, parse_context)

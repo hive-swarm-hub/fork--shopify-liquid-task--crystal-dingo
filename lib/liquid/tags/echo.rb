@@ -21,9 +21,19 @@ module Liquid
   class Echo < Tag
     attr_reader :variable
 
+    # Cache for Echo Variable objects by markup
+    ECHO_VAR_CACHE = {}
+
     def initialize(tag_name, markup, parse_context)
       super
-      @variable = Variable.new(markup, parse_context)
+      em = parse_context.error_mode
+      cacheable = parse_context.variable_cacheable && em != :strict && em != :strict2 && em != :rigid
+      if cacheable && (cached = ECHO_VAR_CACHE[markup])
+        @variable = cached
+      else
+        @variable = Variable.new(markup, parse_context)
+        ECHO_VAR_CACHE[markup] = @variable if cacheable
+      end
     end
 
     def render(context)

@@ -6,57 +6,59 @@ module Liquid
     # Stores frozen VariableLookup/RangeLookup objects keyed by markup string.
     GLOBAL_EXPRESSION_CACHE = {}
 
-    # Cached default locale to avoid allocating I18n.new per parse
-    @default_locale = nil
     def self.default_locale
-      @default_locale ||= I18n.new
+      I18n.default
     end
 
     attr_accessor :locale, :line_number, :trim_whitespace, :depth
     attr_reader :partial, :error_mode, :environment, :expression_cache, :string_scanner, :cursor, :variable_cacheable
 
     def warnings
-      @warnings.equal?(Const::EMPTY_ARRAY) ? (@warnings = []) : @warnings
+      @warnings
+    end
+
+    def add_warning(e)
+      if @warnings.equal?(Const::EMPTY_ARRAY)
+        @warnings = [e]
+      else
+        @warnings << e
+      end
+    end
+
+    # Shared frozen default template options
+    def self.default_template_options
+      @_default_template_options ||= { locale: default_locale }.freeze
     end
 
     def initialize(options = Const::EMPTY_HASH)
       @environment = options.fetch(:environment, Environment.default)
-      # Avoid dup for empty or minimal options
-      @template_options = if options.empty? || options.frozen?
-        { environment: @environment }
+      if options.empty?
+        @template_options = self.class.default_template_options
+        @locale = @template_options[:locale]
+        @variable_cacheable = true
       else
-        options.dup
+        @template_options = options.dup
+        @locale = @template_options[:locale] ||= self.class.default_locale
+        @variable_cacheable = false
       end
-
-      @locale   = @template_options[:locale] ||= self.class.default_locale
       @warnings = Const::EMPTY_ARRAY
 
-      # constructing new StringScanner in Lexer, Tokenizer, etc is expensive
-      # This StringScanner will be shared by all of them
-      @string_scanner = StringScanner.new("")
+      # Reuse StringScanner and Cursor via Thread-local storage
+      @string_scanner = (Thread.current[:_liq_ss] ||= StringScanner.new(""))
+      @string_scanner.string = ""
 
-      # Use global expression cache for default options (no user-provided cache)
-      ec = options[:expression_cache]
-      if ec.nil? && !options.key?(:expression_cache)
-        @expression_cache = GLOBAL_EXPRESSION_CACHE
-        @variable_cacheable = true
-      elsif ec.nil?
-        # Explicitly passed nil: use global cache
-        @expression_cache = GLOBAL_EXPRESSION_CACHE
-        @variable_cacheable = true
-      elsif ec.respond_to?(:[]) && ec.respond_to?(:[]=)
-        @expression_cache = ec
-        @variable_cacheable = false
-      elsif ec
-        @expression_cache = {}
-        @variable_cacheable = false
-      else
-        # expression_cache: false — disable caching
-        @expression_cache = nil
-        @variable_cacheable = false
+      @expression_cache = if @variable_cacheable
+        GLOBAL_EXPRESSION_CACHE
+      elsif options[:expression_cache].nil?
+        {}
+      elsif options[:expression_cache].respond_to?(:[]) && options[:expression_cache].respond_to?(:[]=)
+        options[:expression_cache]
+      elsif options[:expression_cache]
+        {}
       end
 
-      @cursor = Cursor.new("")
+      @cursor = (Thread.current[:_liq_cursor] ||= Cursor.new(""))
+      @cursor.reset("")
 
       self.depth   = 0
       self.partial = false

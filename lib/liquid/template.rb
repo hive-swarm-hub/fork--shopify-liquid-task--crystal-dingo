@@ -81,7 +81,7 @@ module Liquid
       # creates a new <tt>Template</tt> object from liquid source code
       # To enable profiling, pass in <tt>profile: true</tt> as an option.
       # See Liquid::Profiler for more information
-      def parse(source, options = {})
+      def parse(source, options = Const::EMPTY_HASH)
         environment = options[:environment] || Environment.default
         new(environment: environment).parse(source, options)
       end
@@ -95,7 +95,7 @@ module Liquid
 
     # Parse source code.
     # Returns self for easy chaining
-    def parse(source, options = {})
+    def parse(source, options = Const::EMPTY_HASH)
       parse_context = configure_options(options)
       source = source.to_s.to_str
 
@@ -105,6 +105,7 @@ module Liquid
 
       tokenizer     = parse_context.new_tokenizer(source, start_line_number: @line_numbers && 1)
       @root         = Document.parse(tokenizer, parse_context)
+      @warnings = parse_context.warnings
       self
     end
 
@@ -152,11 +153,11 @@ module Liquid
         c
       when Liquid::Drop
         drop         = args.shift
-        drop.context = Context.new([drop, assigns], instance_assigns, registers, @rethrow_errors, @resource_limits, {}, @environment)
+        drop.context = Context.new([drop, assigns], instance_assigns, registers, @rethrow_errors, @resource_limits, Const::EMPTY_HASH, @environment)
       when Hash
-        Context.new([args.shift, assigns], instance_assigns, registers, @rethrow_errors, @resource_limits, {}, @environment)
+        Context.new([args.shift, assigns], instance_assigns, registers, @rethrow_errors, @resource_limits, Const::EMPTY_HASH, @environment)
       when nil
-        Context.new(assigns, instance_assigns, registers, @rethrow_errors, @resource_limits, {}, @environment)
+        Context.new(assigns, instance_assigns, registers, @rethrow_errors, @resource_limits, Const::EMPTY_HASH, @environment)
       else
         raise ArgumentError, "Expected Hash or Liquid::Context as parameter"
       end
@@ -219,11 +220,14 @@ module Liquid
       parse_context = if options.is_a?(ParseContext)
         options
       else
-        opts = options.key?(:environment) ? options : options.merge(environment: @environment)
+        opts = if options.key?(:environment) || @environment.equal?(Environment.default)
+          options
+        else
+          options.merge(environment: @environment)
+        end
         ParseContext.new(opts)
       end
 
-      @warnings = parse_context.warnings
       parse_context
     end
 

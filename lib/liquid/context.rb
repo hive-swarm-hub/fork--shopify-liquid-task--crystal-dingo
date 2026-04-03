@@ -14,12 +14,8 @@ module Liquid
   #
   #   context['bob']  #=> nil  class Context
   class Context
-    attr_reader :scopes, :registers, :environments, :resource_limits, :static_registers, :static_environments
+    attr_reader :scopes, :errors, :registers, :environments, :resource_limits, :static_registers, :static_environments
     attr_accessor :exception_renderer, :template_name, :partial, :global_filter, :strict_variables, :strict_filters, :environment
-
-    def errors
-      @errors.equal?(Const::EMPTY_ARRAY) ? (@errors = []) : @errors
-    end
 
     # rubocop:disable Metrics/ParameterLists
     def self.build(environment: Environment.default, environments: {}, outer_scope: {}, registers: {}, rethrow_errors: false, resource_limits: nil, static_environments: {}, &block)
@@ -110,7 +106,8 @@ module Liquid
       e = internal_error unless e.is_a?(Liquid::Error)
       e.template_name ||= template_name
       e.line_number   ||= line_number
-      errors.push(e)
+      @errors = [] if @errors.frozen?
+      @errors.push(e)
       exception_renderer.call(e).to_s
     end
 
@@ -136,6 +133,12 @@ module Liquid
     # Fast path for three-argument filter invocation (e.g. {{ value | replace: 'a', 'b' }})
     def invoke_three(method, input, arg1, arg2)
       result = strainer.invoke_three(method, input, arg1, arg2)
+      result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil? ? result : result.to_liquid
+    end
+
+    # Invoke filter with pre-built args array — avoids splat allocation
+    def invoke_array(method, input, args)
+      result = strainer.invoke_array(method, input, args)
       result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil? ? result : result.to_liquid
     end
 
@@ -275,11 +278,11 @@ module Liquid
     end
 
     def lookup_and_evaluate(obj, key, raise_on_not_found: true)
-      if @strict_variables && raise_on_not_found && obj.respond_to?(:key?) && !obj.key?(key)
+      value = obj[key]
+
+      if value.nil? && @strict_variables && raise_on_not_found && obj.respond_to?(:key?) && !obj.key?(key)
         raise Liquid::UndefinedVariable, "undefined variable #{key}"
       end
-
-      value = obj[key]
 
       if value.instance_of?(Proc) && obj.respond_to?(:[]=)
         obj[key] = value.arity == 0 ? value.call : value.call(self)

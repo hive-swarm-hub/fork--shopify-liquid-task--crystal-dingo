@@ -248,7 +248,12 @@ module Liquid
       l = length - truncate_string_str.length
       l = 0 if l < 0
 
-      input_str.length > length ? input_str[0...l].concat(truncate_string_str) : input_str
+      if input_str.length > length
+        result = +input_str.slice(0, l)
+        result << truncate_string_str
+      else
+        input_str
+      end
     end
 
     # @liquid_public_docs
@@ -273,11 +278,9 @@ module Liquid
 
       return input if words + 1 > MAX_I32
 
-      # Build result incrementally — avoids split() array + string allocations
       len = input.bytesize
       pos = 0
       word_count = 0
-      result = nil
 
       # Skip leading whitespace
       while pos < len
@@ -286,9 +289,13 @@ module Liquid
         pos += 1
       end
 
+      first_word_start = pos
+      last_word_end = pos
+      simple_spacing = true
+
       while pos < len
-        word_start = pos
         word_count += 1
+        word_start = pos
 
         # Skip non-whitespace chars (word body)
         while pos < len
@@ -297,24 +304,60 @@ module Liquid
           pos += 1
         end
 
-        if word_count > words
-          # Truncate — result already has the first N words
-          truncate_string = Utils.to_s(truncate_string)
-          return result.concat(truncate_string)
+        last_word_end = pos
+
+        if word_count >= words
+          # Check if more words follow
+          while pos < len
+            b = input.getbyte(pos)
+            break unless b == 32 || b == 9 || b == 10 || b == 13 || b == 12
+            pos += 1
+          end
+
+          if pos < len
+            # More words exist — truncate
+            truncate_string = Utils.to_s(truncate_string)
+            if simple_spacing && first_word_start == 0
+              return (+input.byteslice(0, last_word_end)) << truncate_string
+            else
+              # Rebuild with normalized whitespace
+              result = nil
+              p2 = first_word_start
+              wc = 0
+              while p2 < last_word_end && wc < words
+                ws = p2
+                while p2 < last_word_end
+                  b2 = input.getbyte(p2)
+                  break if b2 == 32 || b2 == 9 || b2 == 10 || b2 == 13 || b2 == 12
+                  p2 += 1
+                end
+                wc += 1
+                if result
+                  result << " " << input.byteslice(ws, p2 - ws)
+                else
+                  result = +input.byteslice(ws, p2 - ws)
+                end
+                while p2 < last_word_end
+                  b2 = input.getbyte(p2)
+                  break unless b2 == 32 || b2 == 9 || b2 == 10 || b2 == 13 || b2 == 12
+                  p2 += 1
+                end
+              end
+              return result ? result.concat(truncate_string) : truncate_string
+            end
+          end
+          break
         end
 
-        # Append word to result (only allocate result when we know truncation is possible)
-        if result
-          result << " " << input.byteslice(word_start, pos - word_start)
-        else
-          result = +input.byteslice(word_start, pos - word_start)
-        end
-
-        # Skip whitespace between words
+        # Check whitespace between words (single space = simple)
+        ws_start = pos
         while pos < len
           b = input.getbyte(pos)
           break unless b == 32 || b == 9 || b == 10 || b == 13 || b == 12
           pos += 1
+        end
+        if pos > ws_start && (pos - ws_start != 1 || input.getbyte(ws_start) != 32)
+          simple_spacing = false
         end
       end
 

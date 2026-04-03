@@ -27,32 +27,50 @@ module Liquid
 
     attr_reader :to, :from
 
+    # Cache for Assign Variable objects by the expression part
+    ASSIGN_VAR_CACHE = {}
+
     def initialize(tag_name, markup, parse_context)
       super
-      # Fast byte-level parsing: find '=' to split "varname = expression"
-      eq_pos = markup.index('=')
-      if eq_pos
-        # Trim trailing whitespace from variable name
-        name_end = eq_pos
-        while name_end > 0
-          b = markup.getbyte(name_end - 1)
-          break unless b == 32 || b == 9 || b == 10 || b == 13
-          name_end -= 1
+      # Fast byte-level parse: find "name = expression"
+      len = markup.bytesize
+      pos = 0
+      # Skip leading whitespace
+      pos += 1 while pos < len && (markup.getbyte(pos) == 32 || markup.getbyte(pos) == 9)
+      # Scan identifier for @to
+      to_start = pos
+      b = pos < len ? markup.getbyte(pos) : nil
+      if b && ((b >= 97 && b <= 122) || (b >= 65 && b <= 90) || b == 95)
+        pos += 1
+        while pos < len
+          b = markup.getbyte(pos)
+          break unless (b >= 97 && b <= 122) || (b >= 65 && b <= 90) || (b >= 48 && b <= 57) || b == 95 || b == 45
+          pos += 1
         end
-        if name_end > 0
-          @to = markup.byteslice(0, name_end)
-          rest_start = eq_pos + 1
-          # Trim leading whitespace from expression
-          len = markup.bytesize
-          while rest_start < len
-            b = markup.getbyte(rest_start)
-            break unless b == 32 || b == 9 || b == 10 || b == 13
-            rest_start += 1
+        @to = markup.byteslice(to_start, pos - to_start)
+        # Skip whitespace
+        pos += 1 while pos < len && (markup.getbyte(pos) == 32 || markup.getbyte(pos) == 9)
+        # Expect '='
+        if pos < len && markup.getbyte(pos) == 61 # '='
+          pos += 1
+          # Skip whitespace after '='
+          pos += 1 while pos < len && (markup.getbyte(pos) == 32 || markup.getbyte(pos) == 9)
+          from_markup = pos < len ? markup.byteslice(pos, len - pos).rstrip : ""
+          em = parse_context.error_mode
+          cacheable = parse_context.variable_cacheable && em != :strict && em != :strict2 && em != :rigid
+          if cacheable && (cached = ASSIGN_VAR_CACHE[from_markup])
+            @from = cached
+          else
+            @from = Variable.new(from_markup, parse_context)
+            ASSIGN_VAR_CACHE[from_markup] = @from if cacheable
           end
-          @from = Variable.new(markup.byteslice(rest_start, len - rest_start), parse_context)
-        else
-          self.class.raise_syntax_error(parse_context)
+          return
         end
+      end
+      # Fallback to regex
+      if markup =~ Syntax
+        @to = Regexp.last_match(1)
+        @from = Variable.new(Regexp.last_match(2), parse_context)
       else
         self.class.raise_syntax_error(parse_context)
       end

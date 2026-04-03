@@ -86,6 +86,25 @@ module Liquid
       raise Liquid::ArgumentError, e.message, e.backtrace
     end
 
+    # Invoke with pre-built args array — dispatches by count to avoid splat allocation
+    def invoke_array(method, input, args)
+      unless self.class.invokable?(method)
+        if @context.strict_filters
+          raise Liquid::UndefinedFilter, "undefined filter #{method}"
+        end
+        return input
+      end
+      case args.length
+      when 0 then send(method, input)
+      when 1 then send(method, input, args[0])
+      when 2 then send(method, input, args[0], args[1])
+      when 3 then send(method, input, args[0], args[1], args[2])
+      else send(method, input, *args)
+      end
+    rescue ::ArgumentError => e
+      raise Liquid::ArgumentError, e.message, e.backtrace
+    end
+
     # Fast path for three-argument filter invocation (input + two args).
     def invoke_three(method, input, arg1, arg2)
       if self.class.invokable?(method)

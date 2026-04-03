@@ -96,8 +96,7 @@ module Liquid
       end
     end
 
-    protected
-
+    # Made public for faster invocation (avoids send(:increment!) overhead)
     def increment!
       @index += 1
     end

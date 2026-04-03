@@ -8,9 +8,14 @@ module Liquid
     def self.slice_collection(collection, from, to)
       if (from != 0 || !to.nil?) && collection.respond_to?(:load_slice)
         collection.load_slice(from, to)
-      elsif from == 0 && to.nil? && collection.is_a?(Array)
-        # Fast path: no offset/limit on an Array — return as-is (avoid copy)
-        collection
+      elsif collection.is_a?(Array)
+        if from == 0 && to.nil?
+          collection
+        elsif to
+          collection.slice(from, to - from) || Const::EMPTY_ARRAY
+        else
+          collection.slice(from..) || Const::EMPTY_ARRAY
+        end
       else
         slice_collection_using_each(collection, from, to)
       end
@@ -89,6 +94,11 @@ module Liquid
     end
 
     def self.to_liquid_value(obj)
+      # Fast path: primitive types never have to_liquid_value
+      case obj
+      when String, Integer, Float, NilClass, TrueClass, FalseClass, Array, Hash
+        return obj
+      end
       # Enable "obj" to represent itself as a primitive value like integer, string, or boolean
       return obj.to_liquid_value if obj.respond_to?(:to_liquid_value)
 
