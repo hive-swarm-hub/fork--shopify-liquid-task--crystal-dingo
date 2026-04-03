@@ -354,8 +354,16 @@ module Liquid
       envs = @environments
       len = envs.length
       if len == 1
-        # Fast path: single environment (most common case)
-        found_variable = lookup_and_evaluate(envs[0], key, raise_on_not_found: raise_on_not_found)
+        # Inline lookup for single environment (most common case, avoids method call)
+        env = envs[0]
+        found_variable = env[key]
+        if found_variable.nil? && @strict_variables && raise_on_not_found && env.respond_to?(:key?) && !env.key?(key)
+          raise Liquid::UndefinedVariable, "undefined variable #{key}"
+        end
+        if found_variable.instance_of?(Proc) && env.respond_to?(:[]=)
+          found_variable = found_variable.arity == 0 ? found_variable.call : found_variable.call(self)
+          env[key] = found_variable
+        end
         if !found_variable.nil? || @strict_variables && raise_on_not_found
           return found_variable
         end
