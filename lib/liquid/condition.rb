@@ -200,22 +200,9 @@ module Liquid
 
       case op
       when '=='
-        # Inline equal_variables for common case (no MethodLiterals)
-        if left.is_a?(MethodLiteral)
-          call_method_literal(left, right)
-        elsif right.is_a?(MethodLiteral)
-          call_method_literal(right, left)
-        else
-          left == right
-        end
+        equal_variables(left, right)
       when '!='
-        if left.is_a?(MethodLiteral)
-          !call_method_literal(left, right)
-        elsif right.is_a?(MethodLiteral)
-          !call_method_literal(right, left)
-        else
-          left != right
-        end
+        !equal_variables(left, right)
       when '<', '>', '>=', '<='
         if left.respond_to?(op) && right.respond_to?(op) && !left.is_a?(Hash) && !right.is_a?(Hash)
           left.send(op, right)
