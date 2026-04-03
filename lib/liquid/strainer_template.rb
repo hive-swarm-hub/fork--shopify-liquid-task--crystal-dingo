@@ -25,15 +25,22 @@ module Liquid
         include(filter)
 
         filter_methods.merge(filter.public_instance_methods.map(&:to_s))
+        # Invalidate invokable cache when filters change
+        @invokable_cache = nil
       end
 
       def invokable?(method)
-        filter_methods.include?(method.is_a?(String) ? method : method.to_s)
+        key = method.is_a?(String) ? method : method.to_s
+        cache = @invokable_cache ||= {}
+        cached = cache[key]
+        return cached unless cached.nil?
+        cache[key] = filter_methods.include?(key)
       end
 
       def inherited(subclass)
         super
         subclass.instance_variable_set(:@filter_methods, @filter_methods.dup)
+        subclass.instance_variable_set(:@invokable_cache, nil)
       end
 
       def filter_method_names
