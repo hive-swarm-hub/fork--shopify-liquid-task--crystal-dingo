@@ -254,25 +254,27 @@ module Liquid
       # Check if we need per-node write score tracking
       check_write = resource_limits.render_length_limit || resource_limits.last_capture_length
 
-      # YJIT specializes Array#each better than manual while loops
+      idx = 0
       if check_write
-        nodelist.each do |node|
+        while (node = nodelist[idx])
           if node.instance_of?(String)
             output << node
           else
             render_node(context, output, node)
             break if context.interrupt?
           end
+          idx += 1
           resource_limits.increment_write_score(output)
         end
       else
-        nodelist.each do |node|
+        while (node = nodelist[idx])
           if node.instance_of?(String)
             output << node
           else
             render_node(context, output, node)
             break if context.interrupt?
           end
+          idx += 1
         end
       end
 
