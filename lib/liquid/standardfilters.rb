@@ -99,20 +99,14 @@ module Liquid
     #   Escapes special characters in HTML, such as `<>`, `'`, and `&`, and converts characters into escape sequences. The filter doesn't effect characters within the string that don’t have a corresponding escape sequence.".
     # @liquid_syntax string | escape
     # @liquid_return [string]
+    HTML_ESCAPE_RE = /[&<>"']/
+    private_constant :HTML_ESCAPE_RE
+
     def escape(input)
       return if input.nil?
       str = input.instance_of?(String) ? input : Utils.to_s(input)
-      # Fast path: byte-scan for HTML special chars; skip CGI.escapeHTML if none found
-      len = str.bytesize
-      i = 0
-      while i < len
-        b = str.getbyte(i)
-        if b == 38 || b == 60 || b == 62 || b == 34 || b == 39 # & < > " '
-          return CGI.escapeHTML(str)
-        end
-        i += 1
-      end
-      str
+      # Fast path: C-level match? avoids CGI.escapeHTML string allocation when no special chars
+      str.match?(HTML_ESCAPE_RE) ? CGI.escapeHTML(str) : str
     end
     alias_method :h, :escape
 
@@ -688,11 +682,9 @@ module Liquid
     # @liquid_syntax string | replace: string, string
     # @liquid_return [string]
     def replace(input, string, replacement = '')
-      input = input.instance_of?(String) ? input : Utils.to_s(input)
-      string = string.instance_of?(String) ? string : Utils.to_s(string)
-      # Fast path: skip gsub when search string not present
-      return input unless input.include?(string)
-      replacement = replacement.instance_of?(String) ? replacement : Utils.to_s(replacement)
+      string = Utils.to_s(string)
+      replacement = Utils.to_s(replacement)
+      input = Utils.to_s(input)
       input.gsub(string, replacement)
     end
 
@@ -1084,21 +1076,10 @@ module Liquid
     # @liquid_optional_param allow_false: [boolean] Whether to use false values instead of the default.
     def default(input, default_value = '', options = {})
       options = {} unless options.is_a?(Hash)
-      if options['allow_false']
-        false_check = input.nil?
+      false_check = if options['allow_false']
+        input.nil?
       else
-        # Inline to_liquid_value fast path for common types
-        val = case input
-              when String, Integer, Float, Array, Hash
-                input
-              when NilClass, FalseClass
-                input
-              when TrueClass
-                input
-              else
-                input.respond_to?(:to_liquid_value) ? input.to_liquid_value : input
-              end
-        false_check = !val
+        !Liquid::Utils.to_liquid_value(input)
       end
       false_check || (input.respond_to?(:empty?) && input.empty?) ? default_value : input
     end

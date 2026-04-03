@@ -74,21 +74,10 @@ module Liquid
       loop do
         case condition.child_relation
         when :or
-          # Inline to_liquid_value: primitives never have it
-          r = case result
-              when String, Integer, Float, NilClass, TrueClass, FalseClass, Array, Hash
-                result
-              else
-                result.respond_to?(:to_liquid_value) ? result.to_liquid_value : result
-              end
+          r = Liquid::Utils.to_liquid_value(result)
           break if r
         when :and
-          r = case result
-              when String, Integer, Float, NilClass, TrueClass, FalseClass, Array, Hash
-                result
-              else
-                result.respond_to?(:to_liquid_value) ? result.to_liquid_value : result
-              end
+          r = Liquid::Utils.to_liquid_value(result)
           break unless r
         else
           break
