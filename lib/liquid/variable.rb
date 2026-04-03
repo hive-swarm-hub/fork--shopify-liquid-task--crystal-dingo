@@ -510,31 +510,6 @@ module Liquid
         else
           render(context)
         end
-      elsif filters.length == 2 && context.global_filter.nil?
-        # Fast path: two filters (e.g. {{ x | asset_url | script_tag }})
-        obj = @name.instance_of?(VariableLookup) ? @name.evaluate(context) : context.evaluate(@name)
-        fn1, fa1, fk1 = filters[0]
-        obj = if fa1.empty? && !fk1
-          context.invoke_single(fn1, obj)
-        elsif !fk1 && fa1.length == 1
-          context.invoke_two(fn1, obj, context.evaluate(fa1[0]))
-        elsif !fk1 && fa1.length == 2
-          context.invoke_three(fn1, obj, context.evaluate(fa1[0]), context.evaluate(fa1[1]))
-        else
-          fa1 = evaluate_filter_expressions(context, fa1, fk1)
-          context.invoke_array(fn1, obj, fa1)
-        end
-        fn2, fa2, fk2 = filters[1]
-        obj = if fa2.empty? && !fk2
-          context.invoke_single(fn2, obj)
-        elsif !fk2 && fa2.length == 1
-          context.invoke_two(fn2, obj, context.evaluate(fa2[0]))
-        elsif !fk2 && fa2.length == 2
-          context.invoke_three(fn2, obj, context.evaluate(fa2[0]), context.evaluate(fa2[1]))
-        else
-          fa2 = evaluate_filter_expressions(context, fa2, fk2)
-          context.invoke_array(fn2, obj, fa2)
-        end
       else
         obj = render(context)
       end
