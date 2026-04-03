@@ -113,33 +113,52 @@ module Liquid
 
     def invoke(method, *args)
       result = strainer.invoke(method, *args)
-      # Skip to_liquid for primitives (they return self)
-      result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil? ? result : result.to_liquid
+      if result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil?
+        result
+      else
+        result.to_liquid
+      end
     end
 
     # Fast path for single-argument filter invocation (the most common case:
     # {{ value | filter }}) — avoids *args splat allocation.
     def invoke_single(method, input)
       result = strainer.invoke_single(method, input)
-      result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil? ? result : result.to_liquid
+      if result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil?
+        result
+      else
+        result.to_liquid
+      end
     end
 
     # Fast path for two-argument filter invocation (e.g. {{ value | default: 'x' }})
     def invoke_two(method, input, arg1)
       result = strainer.invoke_two(method, input, arg1)
-      result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil? ? result : result.to_liquid
+      if result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil?
+        result
+      else
+        result.to_liquid
+      end
     end
 
     # Fast path for three-argument filter invocation (e.g. {{ value | replace: 'a', 'b' }})
     def invoke_three(method, input, arg1, arg2)
       result = strainer.invoke_three(method, input, arg1, arg2)
-      result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil? ? result : result.to_liquid
+      if result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil?
+        result
+      else
+        result.to_liquid
+      end
     end
 
     # Invoke filter with pre-built args array — avoids splat allocation
     def invoke_array(method, input, args)
       result = strainer.invoke_array(method, input, args)
-      result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil? ? result : result.to_liquid
+      if result.instance_of?(String) || result.instance_of?(Integer) || result.instance_of?(Float) || result.nil?
+        result
+      else
+        result.to_liquid
+      end
     end
 
     # Push new local scope on the stack. use <tt>Context#stack</tt> instead

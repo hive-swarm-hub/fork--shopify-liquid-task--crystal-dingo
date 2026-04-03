@@ -505,6 +505,8 @@ module Liquid
           context.invoke_single(fn, obj)
         elsif !fk && fa.length == 1
           context.invoke_two(fn, obj, context.evaluate(fa[0]))
+        elsif !fk && fa.length == 2
+          context.invoke_three(fn, obj, context.evaluate(fa[0]), context.evaluate(fa[1]))
         else
           render(context)
         end
@@ -513,6 +515,8 @@ module Liquid
       end
       if obj.instance_of?(String)
         output << obj
+      elsif obj.instance_of?(Integer)
+        output << ((obj >= 0 && obj < 1000) ? Utils::SMALL_INT_STRINGS[obj] : obj.to_s)
       elsif !obj.nil?
         render_obj_to_output(obj, output)
       end
@@ -524,6 +528,8 @@ module Liquid
         output << obj
       elsif obj.nil?
         # Do nothing
+      elsif obj.instance_of?(Integer)
+        output << ((obj >= 0 && obj < 1000) ? Utils::SMALL_INT_STRINGS[obj] : obj.to_s)
       elsif obj.instance_of?(Array)
         obj.each do |o|
           render_obj_to_output(o, output)

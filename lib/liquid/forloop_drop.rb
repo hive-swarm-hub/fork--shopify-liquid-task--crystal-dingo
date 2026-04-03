@@ -91,8 +91,8 @@ module Liquid
       when 'rindex'     then @length - @index
       when 'rindex0'    then @length - @index - 1
       when 'parentloop' then @parentloop
-      when 'name'       then @name
-      else invoke_drop(method_or_key)
+      else
+        invoke_drop(method_or_key)
       end
     end
 
